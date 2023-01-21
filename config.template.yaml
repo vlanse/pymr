@@ -1,0 +1,6 @@
+config:
+  gitlab: 'https://gitlab.com'
+  token: "gitlab private token"
+  projects:
+    my_amazing_repo:
+      id: PROJECT_ID
