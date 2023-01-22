@@ -2,16 +2,39 @@ import asyncio
 import datetime
 import http
 import os
+from argparse import ArgumentParser
+from pathlib import Path
 
 import aiohttp
 import tenacity
 import yarl
-from dateutil import parser
+from dateutil import parser as dt_parser
 from ruamel.yaml import YAML
 from tenacity import retry, stop_after_attempt
-from pathlib import Path
 
-REPOS_FILE = f'{os.curdir}/config.yaml'
+
+def red(text): return f'\033[91m {text}\033[00m'
+
+
+def green(text): return f'\033[92m {text}\033[00m'
+
+
+def yellow(text): return f'\033[93m {text}\033[00m'
+
+
+def light_purple(text): return f'\033[94m {text}\033[00m'
+
+
+def purple(text): return f'\033[95m {text}\033[00m'
+
+
+def cyan(text): return f'\033[96m {text}\033[00m'
+
+
+def light_gray(text): return f'\033[97m {text}\033[00m'
+
+
+def link(url, text): return f'\x1b]8;;{url}\x1b\\{text}\x1b]8;;\x1b\\'
 
 
 @retry(stop=stop_after_attempt(10))
@@ -43,56 +66,51 @@ async def api_call(
 
 
 async def get_all_merge_request(session: aiohttp.ClientSession, project_id: int):
-    res = await api_call(
+    return await api_call(
         session,
         f'/api/v4/projects/{project_id}/merge_requests',
         method='GET',
         query={'per_page': 100, 'page': 1, 'state': 'opened'},
     )
-    return res
 
 
 async def get_eligible_approvers(session: aiohttp.ClientSession, project_id: int):
-    res = await api_call(
+    return await api_call(
         session,
         f'/api/v4/projects/{project_id}/approval_rules',
         method='GET',
     )
-    return res
 
 
 async def get_current_user(session: aiohttp.ClientSession):
-    res = await api_call(
+    return await api_call(
         session,
         f'/api/v4/user',
         method='GET',
     )
-    return res
 
 
 async def get_approvals(session: aiohttp.ClientSession, project_id: int, mr_iid: int):
-    res = await api_call(
+    return await api_call(
         session,
         f'/api/v4/projects/{project_id}/merge_requests/{mr_iid}/approvals',
         method='GET',
     )
-    return res
 
 
 async def get_discussions(session: aiohttp.ClientSession, project_id: int, mr_iid: int):
-    res = await api_call(
+    return await api_call(
         session,
         f'/api/v4/projects/{project_id}/merge_requests/{mr_iid}/discussions',
         method='GET',
         query={'per_page': 100, 'page': 1, 'state': 'opened'},
     )
-    return res
 
 
 async def async_main():
-    # parser = ArgumentParser()
-    # parser.add_argument('--config', dest='config', help='path to config file')
-    # args = parser.parse_args()
+    parser = ArgumentParser()
+    parser.add_argument('--skip-approved-by-me', action='store_true', help='skip MRs approved by me')
+    args = parser.parse_args()
 
     config_path = os.path.join(str(Path.home()), 'pymr-config.yaml')
     if not os.path.exists(config_path):
@@ -104,6 +122,7 @@ async def async_main():
         config = yaml.load(f)['config']
 
     projects = [x['id'] for x in config['projects'].values()]
+    current_user = {}
 
     async with aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(limit=0, ssl=False),
@@ -114,7 +133,9 @@ async def async_main():
 
         async def collect_project_data(project_id):
             try:
-                all_mrs, eligible_approvers = await asyncio.gather(
+                nonlocal current_user
+                current_user, all_mrs, elig_approvers = await asyncio.gather(
+                    get_current_user(session),
                     get_all_merge_request(session, project_id),
                     get_eligible_approvers(session, project_id)
                 )
@@ -124,7 +145,7 @@ async def async_main():
 
             data[project_id] = {}
             data[project_id]['mrs'] = {x['iid']: {'mr': x} for x in all_mrs}
-            data[project_id]['approvers'] = eligible_approvers
+            data[project_id]['approvers'] = elig_approvers
 
         await asyncio.gather(*(collect_project_data(x) for x in projects))
 
@@ -139,9 +160,9 @@ async def async_main():
                 asyncio.gather(*(get_discussions(session, project_id, mr_iid) for mr_iid in mr_iids)),
                 asyncio.gather(*(get_approvals(session, project_id, mr_iid) for mr_iid in mr_iids)),
             )
-            for i in range(len(mr_iids)):
-                mr_iid = mr_iids[i]
-                data[project_id]['mrs'][mr_iid].update({'approvals': approvals[i], 'discussions': discussions[i]})
+            for idx in range(len(mr_iids)):
+                mr_iid = mr_iids[idx]
+                data[project_id]['mrs'][mr_iid].update({'approvals': approvals[idx], 'discussions': discussions[idx]})
 
         await asyncio.gather(
             *(collect_mr_data(project_id, mr_iids) for project_id, mr_iids in project_mr_iids.items() if mr_iids)
@@ -151,6 +172,13 @@ async def async_main():
     for project in data.values():
         if not project['mrs']:
             continue
+
+        eligible_approvers = set()
+        for i in project['approvers']:
+            if i['name'] != 'Owner':
+                continue
+            for a in i['eligible_approvers']:
+                eligible_approvers.add(a['username'])
 
         for mr in project['mrs'].values():
             unresolved_threads = [
@@ -164,16 +192,18 @@ async def async_main():
                 'has_conflicts': mr['mr']['has_conflicts'],
                 'approvals':
                     [x for x in [x.get('user', {}).get('username') for x in mr['approvals']['approved_by']] if x],
-                'created_at': parser.parse(mr['mr']['created_at']),
-                'updated_at': parser.parse(mr['mr']['updated_at']),
+                'created_at': dt_parser.parse(mr['mr']['created_at']),
+                'updated_at': dt_parser.parse(mr['mr']['updated_at']),
                 'unresolved_count': unresolved_count,
+                'eligible_approvers': eligible_approvers,
+                'current_user': current_user['username'],
             }
             report.append(info)
 
-    render_report(sorted(report, key=lambda x: x['created_at']))
+    render_report(sorted(report, key=lambda x: x['created_at']), skip_approved_by_me=args.skip_approved_by_me)
 
 
-def render_report(report: list):
+def render_report(report: list, skip_approved_by_me=False):
     all_approvers = set()
     for r in report:
         for a in r['approvals']:
@@ -206,16 +236,25 @@ def render_report(report: list):
         link_title = f"""{r['title'][:70]:<70}"""
         caption.append(f"""{link(r['web_url'], link_title):<70}""")
 
+        skip_mr = False
         if r['approvals']:
-            caption.append(f"""✅ {', '.join(r['approvals'])}""")
+            trusted_approvals, approvals = [], []
+            for a in r['approvals']:
+                if skip_approved_by_me and a == r['current_user']:
+                    skip_mr = True
+
+                if a in r['eligible_approvers']:
+                    trusted_approvals.append(green(a))
+                else:
+                    approvals.append(cyan(a))
+            trusted_approvals, approvals = sorted(trusted_approvals), sorted(approvals)
+            trusted_approvals.extend(approvals)
+            caption.append(f"""✅ {', '.join(trusted_approvals)}""")
         else:
             caption.append('')
 
-        print(' | '.join(caption))
-
-
-def link(url, text):
-    return '\x1b]8;;' + url + '\x1b\\' + text + '\x1b]8;;\x1b\\'
+        if not skip_mr:
+            print(' | '.join(caption))
 
 
 def main():
