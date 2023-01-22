@@ -1,6 +1,14 @@
 config:
   gitlab: 'https://gitlab.com'
   token: "gitlab private token"
-  projects:
-    my_amazing_repo:
-      id: PROJECT_ID
+  groups:
+    project-group-1:
+      show_only_my: true
+      projects:
+        my_amazing_repo:
+          id: PROJECT_ID
+
+    project-group-2:
+      projects:
+        another_repo:
+          id: PROJECT_ID_2

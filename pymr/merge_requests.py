@@ -3,6 +3,7 @@ import datetime
 import http
 import os
 from argparse import ArgumentParser
+from collections import OrderedDict
 from pathlib import Path
 
 import aiohttp
@@ -121,7 +122,12 @@ async def async_main():
     with open(config_path) as f:
         config = yaml.load(f)['config']
 
-    projects = [x['id'] for x in config['projects'].values()]
+    group_settings = {group_name: {k: v} for group_name, group in config['groups'].items() for k, v in group.items() if
+                      k != 'projects'}
+
+    projects = {proj['id']: group_name for group_name, group in config['groups'].items() for proj in
+                group['projects'].values()}
+
     current_user = {}
 
     async with aiohttp.ClientSession(
@@ -168,8 +174,8 @@ async def async_main():
             *(collect_mr_data(project_id, mr_iids) for project_id, mr_iids in project_mr_iids.items() if mr_iids)
         )
 
-    report = []
-    for project in data.values():
+    reports = OrderedDict()
+    for project_id, project in data.items():
         if not project['mrs']:
             continue
 
@@ -197,13 +203,24 @@ async def async_main():
                 'unresolved_count': unresolved_count,
                 'eligible_approvers': eligible_approvers,
                 'current_user': current_user['username'],
+
             }
-            report.append(info)
+            group = projects[project_id]
+            if group not in reports:
+                reports[group] = []
 
-    render_report(sorted(report, key=lambda x: x['created_at']), skip_approved_by_me=args.skip_approved_by_me)
+            reports[group].append(info)
+
+    for group, report in reports.items():
+        print(group)
+        render_group_report(
+            sorted(report, key=lambda x: x['created_at']),
+            skip_approved_by_me=args.skip_approved_by_me,
+            **group_settings.get(group, {}),
+        )
 
 
-def render_report(report: list, skip_approved_by_me=False):
+def render_group_report(report: list, skip_approved_by_me=False, show_only_my=False):
     all_approvers = set()
     for r in report:
         for a in r['approvals']:
@@ -211,6 +228,9 @@ def render_report(report: list, skip_approved_by_me=False):
     max_approver_len = max(len(x) for x in all_approvers)
 
     for r in report:
+        if show_only_my and r['author_username'] != r['current_user']:
+            continue
+
         age_days = (datetime.datetime.utcnow() - r['created_at'].replace(tzinfo=None)).days
 
         developer = '👨‍💻'

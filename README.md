@@ -3,7 +3,7 @@
 ## Installation
 [Install python 3](https://www.python.org/downloads/).
 
-Run the following (maybe you will be asked by pip to enter github credentials)
+Run the following (maybe you will be asked by pip to enter gitHub credentials)
 ```shell
 pip3 install git+https://github.com/vlanse/pymr.git#egg=pymr
 ```
@@ -12,11 +12,20 @@ pip3 install git+https://github.com/vlanse/pymr.git#egg=pymr
 Create `pymr-config.yaml` like this in your home folder
 ```yaml
 config:
-  gitlab: 'https://my.gitlab.address'
+  gitlab: 'https://gitlab.com'
   token: "gitlab private token"
-  projects:
-    my_amazing_repo:
-      id: PROJECT_ID
+  groups:
+    project-group-1:
+      # per-group setting section
+      show_only_my: true  # if only MRs authored by current user are needed for some reason
+      projects:
+        my_amazing_repo:
+          id: PROJECT_ID
+
+    project-group-2:
+      projects:
+        another_repo:
+          id: PROJECT_ID_2
 ```
 
 Put gitlab address and access token there, write your projects with their IDs
