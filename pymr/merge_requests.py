@@ -108,6 +108,15 @@ async def get_discussions(session: aiohttp.ClientSession, project_id: int, mr_ii
     )
 
 
+async def get_commits(session: aiohttp.ClientSession, project_id: int, mr_iid: int):
+    return await api_call(
+        session,
+        f'/api/v4/projects/{project_id}/merge_requests/{mr_iid}/commits',
+        method='GET',
+        query={'per_page': 100, 'page': 1, 'state': 'opened'},
+    )
+
+
 async def async_main():
     parser = ArgumentParser()
     parser.add_argument('--skip-approved-by-me', action='store_true', help='skip MRs approved by me')
@@ -162,13 +171,18 @@ async def async_main():
         project_mr_iids = {proj_id: [mr_iid for mr_iid in proj['mrs']] for proj_id, proj in data.items()}
 
         async def collect_mr_data(project_id, mr_iids):
-            discussions, approvals = await asyncio.gather(
+            discussions, approvals, commits = await asyncio.gather(
                 asyncio.gather(*(get_discussions(session, project_id, mr_iid) for mr_iid in mr_iids)),
                 asyncio.gather(*(get_approvals(session, project_id, mr_iid) for mr_iid in mr_iids)),
+                asyncio.gather(*(get_commits(session, project_id, mr_iid) for mr_iid in mr_iids)),
             )
             for idx in range(len(mr_iids)):
                 mr_iid = mr_iids[idx]
-                data[project_id]['mrs'][mr_iid].update({'approvals': approvals[idx], 'discussions': discussions[idx]})
+                data[project_id]['mrs'][mr_iid].update({
+                    'approvals': approvals[idx],
+                    'discussions': discussions[idx],
+                    'commits': commits[idx],
+                })
 
         await asyncio.gather(
             *(collect_mr_data(project_id, mr_iids) for project_id, mr_iids in project_mr_iids.items() if mr_iids)
@@ -191,10 +205,15 @@ async def async_main():
                 [n for n in d['notes'] if n['resolvable'] and not n['resolved']] for d in mr['discussions']
             ]
             unresolved_count = len([x for x in unresolved_threads if x])
+
+            author_username = mr['mr']['author']['username']
+            if mr['commits']:
+                author_username = mr['commits'][-1]['author_email'].split('@')[0]
+
             info = {
                 'web_url': mr['mr']['web_url'],
                 'title': mr['mr']['title'],
-                'author_username': mr['mr']['author']['username'],
+                'author_username': author_username,
                 'has_conflicts': mr['mr']['has_conflicts'],
                 'approvals':
                     [x for x in [x.get('user', {}).get('username') for x in mr['approvals']['approved_by']] if x],
@@ -203,7 +222,6 @@ async def async_main():
                 'unresolved_count': unresolved_count,
                 'eligible_approvers': eligible_approvers,
                 'current_user': current_user['username'],
-
             }
             group = projects[project_id]
             if group not in reports:
