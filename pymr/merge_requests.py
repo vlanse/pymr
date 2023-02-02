@@ -251,7 +251,7 @@ def render_group_report(report: list, skip_approved_by_me=False, show_only_my=Fa
 
         age_days = (datetime.datetime.utcnow() - r['created_at'].replace(tzinfo=None)).days
 
-        developer = '👨‍💻'
+        developer = '👨‍'
         if age_days > 10:
             developer = '💀'
 
