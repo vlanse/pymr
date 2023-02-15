@@ -239,11 +239,11 @@ async def async_main():
 
 
 def render_group_report(report: list, skip_approved_by_me=False, show_only_my=False):
-    all_approvers = set()
+    all_authors = set()
     for r in report:
-        for a in r['approvals']:
-            all_approvers.add(a)
-    max_approver_len = max(len(x) for x in all_approvers)
+        # for a in r['approvals']:
+        all_authors.add(r['author_username'])
+    max_author_name_len = max(len(x) for x in all_authors)
 
     for r in report:
         if show_only_my and r['author_username'] != r['current_user']:
@@ -255,9 +255,12 @@ def render_group_report(report: list, skip_approved_by_me=False, show_only_my=Fa
         if age_days > 10:
             developer = '💀'
 
-        caption = [
-            f"""{developer}{r['author_username']:<{max_approver_len}}""", f"""{age_days:>3}d"""
+        items = [
+            f"""{developer}{r['author_username']:<{max_author_name_len}}""", f"""{age_days:>3}d"""
         ]
+
+        link_title = f"""{r['title'][:70]:<70}"""
+        items.append(f"""{link(r['web_url'], link_title):<70}""")
 
         flags = []
         if r['unresolved_count']:
@@ -266,13 +269,11 @@ def render_group_report(report: list, skip_approved_by_me=False, show_only_my=Fa
             flags.append('⏳')
         if r['has_conflicts']:
             flags.append('🛑')
+
         if not flags:
             flags.append('⏳')
 
-        caption.append(f"""{' '.join(flags):>4}""")
-
-        link_title = f"""{r['title'][:70]:<70}"""
-        caption.append(f"""{link(r['web_url'], link_title):<70}""")
+        items.append(f"""{' '.join(flags):>4}""")
 
         skip_mr = False
         if r['approvals']:
@@ -287,12 +288,14 @@ def render_group_report(report: list, skip_approved_by_me=False, show_only_my=Fa
                     approvals.append(cyan(a))
             trusted_approvals, approvals = sorted(trusted_approvals), sorted(approvals)
             trusted_approvals.extend(approvals)
-            caption.append(f"""✅ {', '.join(trusted_approvals)}""")
+
+            items.append(f"""✅{', '.join(trusted_approvals)}""")
+
         else:
-            caption.append('')
+            items.append('')
 
         if not skip_mr:
-            print(' | '.join(caption))
+            print(' | '.join(items))
 
 
 def main():
