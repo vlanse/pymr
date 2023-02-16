@@ -14,6 +14,7 @@ Create `pymr-config.yaml` like this in your home folder
 config:
   gitlab: 'https://gitlab.com'
   token: "gitlab private token"
+  robots: [some-robot-account] # automation accounts usernames, to highlight MRs by API clients with special avatar
   groups:
     project-group-1:
       # per-group setting section

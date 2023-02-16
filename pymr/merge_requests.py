@@ -5,6 +5,7 @@ import os
 from argparse import ArgumentParser
 from collections import OrderedDict
 from pathlib import Path
+from typing import Set
 
 import aiohttp
 import tenacity
@@ -131,6 +132,8 @@ async def async_main():
     with open(config_path) as f:
         config = yaml.load(f)['config']
 
+    robots = {x for x in config['robots']}
+
     group_settings = {group_name: {k: v} for group_name, group in config['groups'].items() for k, v in group.items() if
                       k != 'projects'}
 
@@ -234,11 +237,12 @@ async def async_main():
         render_group_report(
             sorted(report, key=lambda x: x['created_at']),
             skip_approved_by_me=args.skip_approved_by_me,
+            robots=robots,
             **group_settings.get(group, {}),
         )
 
 
-def render_group_report(report: list, skip_approved_by_me=False, show_only_my=False):
+def render_group_report(report: list, skip_approved_by_me=False, show_only_my=False, robots: Set[str] = None):
     all_authors = set()
     for r in report:
         # for a in r['approvals']:
@@ -251,12 +255,15 @@ def render_group_report(report: list, skip_approved_by_me=False, show_only_my=Fa
 
         age_days = (datetime.datetime.utcnow() - r['created_at'].replace(tzinfo=None)).days
 
-        developer = '👨‍'
+        author = r['author_username']
+        author_avatar = '👨‍'
         if age_days > 10:
-            developer = '💀'
+            author_avatar = '💀'
+        if author in robots:
+            author_avatar = '🤖'
 
         items = [
-            f"""{developer}{r['author_username']:<{max_author_name_len}}""", f"""{age_days:>3}d"""
+            f"""{author_avatar}{r['author_username']:<{max_author_name_len}}""", f"""{age_days:>3}d"""
         ]
 
         link_title = f"""{r['title'][:70]:<70}"""
