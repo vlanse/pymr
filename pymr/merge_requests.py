@@ -289,7 +289,8 @@ def render_group_report(report: list, skip_approved_by_me=False, show_only_my=Fa
         max_author_name_len = min(12, max_author_name_len)
 
         author_name = r['author_username'][:max_author_name_len]
-        if author_name == r['current_user']:
+        own_mr = author_name == r['current_user']
+        if own_mr:
             author_name = green(author_name) + ' ' * (max_author_name_len - len(author_name))
 
         items = [
@@ -299,6 +300,8 @@ def render_group_report(report: list, skip_approved_by_me=False, show_only_my=Fa
         ]
 
         link_title = f"""{r['title'][:60]:<60}"""
+        if own_mr:
+            link_title = green(link_title)
         items.append(f""" {link(r['web_url'], link_title):<70} """)
 
         flags = []
