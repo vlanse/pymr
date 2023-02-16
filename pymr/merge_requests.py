@@ -15,31 +15,42 @@ from ruamel.yaml import YAML
 from tenacity import retry, stop_after_attempt
 
 
-def red(text): return f'\033[91m {text}\033[00m'
+def red(text): return f'\033[91m{text}\033[00m'
 
 
-def green(text): return f'\033[92m {text}\033[00m'
+def green(text): return f'\033[92m{text}\033[00m'
 
 
-def yellow(text): return f'\033[93m {text}\033[00m'
+def yellow(text): return f'\033[93m{text}\033[00m'
 
 
-def light_purple(text): return f'\033[94m {text}\033[00m'
+def light_purple(text): return f'\033[94m{text}\033[00m'
 
 
-def purple(text): return f'\033[95m {text}\033[00m'
+def purple(text): return f'\033[95m{text}\033[00m'
 
 
-def cyan(text): return f'\033[96m {text}\033[00m'
+def cyan(text): return f'\033[96m{text}\033[00m'
 
 
-def light_gray(text): return f'\033[97m {text}\033[00m'
+def light_gray(text): return f'\033[97m{text}\033[00m'
 
 
 def link(url, text): return f'\x1b]8;;{url}\x1b\\{text}\x1b]8;;\x1b\\'
 
 
-@retry(stop=stop_after_attempt(10))
+def subscript(i: int):
+    # if i > 10:
+    #     i = 10
+    # return f"{chr(0x2080 + i)}"
+    return str(i) if i < 10 else '+'
+
+
+def bold(s: str):
+    return f"""\033[1m{s}\033[0m"""
+
+
+@retry(stop=stop_after_attempt(1))
 async def api_call(
         session: aiohttp.ClientSession, path: str,
         payload: dict = None, method='POST', query: dict = None, headers: dict = None,
@@ -67,7 +78,7 @@ async def api_call(
         raise
 
 
-async def get_all_merge_request(session: aiohttp.ClientSession, project_id: int):
+async def get_all_merge_requests(session: aiohttp.ClientSession, project_id: int):
     return await api_call(
         session,
         f'/api/v4/projects/{project_id}/merge_requests',
@@ -118,6 +129,14 @@ async def get_commits(session: aiohttp.ClientSession, project_id: int, mr_iid: i
     )
 
 
+async def get_mr_info(session: aiohttp.ClientSession, project_id: int, mr_iid: int):
+    return await api_call(
+        session,
+        f'/api/v4/projects/{project_id}/merge_requests/{mr_iid}',
+        method='GET',
+    )
+
+
 async def async_main():
     parser = ArgumentParser()
     parser.add_argument('--skip-approved-by-me', action='store_true', help='skip MRs approved by me')
@@ -140,7 +159,8 @@ async def async_main():
     projects = {proj['id']: group_name for group_name, group in config['groups'].items() for proj in
                 group['projects'].values()}
 
-    current_user = {}
+    project_names = {proj['id']: name for group_name, group in config['groups'].items() for name, proj in
+                     group['projects'].items()}
 
     async with aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(limit=0, ssl=False),
@@ -149,12 +169,12 @@ async def async_main():
     ) as session:
         data = {}
 
+        current_user = await get_current_user(session)
+
         async def collect_project_data(project_id):
             try:
-                nonlocal current_user
-                current_user, all_mrs, elig_approvers = await asyncio.gather(
-                    get_current_user(session),
-                    get_all_merge_request(session, project_id),
+                all_mrs, elig_approvers = await asyncio.gather(
+                    get_all_merge_requests(session, project_id),
                     get_eligible_approvers(session, project_id)
                 )
             except tenacity.RetryError as ex:
@@ -174,10 +194,11 @@ async def async_main():
         project_mr_iids = {proj_id: [mr_iid for mr_iid in proj['mrs']] for proj_id, proj in data.items()}
 
         async def collect_mr_data(project_id, mr_iids):
-            discussions, approvals, commits = await asyncio.gather(
+            discussions, approvals, commits, mr_infos = await asyncio.gather(
                 asyncio.gather(*(get_discussions(session, project_id, mr_iid) for mr_iid in mr_iids)),
                 asyncio.gather(*(get_approvals(session, project_id, mr_iid) for mr_iid in mr_iids)),
                 asyncio.gather(*(get_commits(session, project_id, mr_iid) for mr_iid in mr_iids)),
+                asyncio.gather(*(get_mr_info(session, project_id, mr_iid) for mr_iid in mr_iids)),
             )
             for idx in range(len(mr_iids)):
                 mr_iid = mr_iids[idx]
@@ -185,6 +206,7 @@ async def async_main():
                     'approvals': approvals[idx],
                     'discussions': discussions[idx],
                     'commits': commits[idx],
+                    'mr_info': mr_infos[idx],
                 })
 
         await asyncio.gather(
@@ -215,6 +237,7 @@ async def async_main():
 
             info = {
                 'web_url': mr['mr']['web_url'],
+                'project_name': project_names[mr['mr']['project_id']],
                 'title': mr['mr']['title'],
                 'author_username': author_username,
                 'has_conflicts': mr['mr']['has_conflicts'],
@@ -225,6 +248,7 @@ async def async_main():
                 'unresolved_count': unresolved_count,
                 'eligible_approvers': eligible_approvers,
                 'current_user': current_user['username'],
+                'pipeline_status': (mr.get('mr_info', {}).get('pipeline', {}) or {}).get('status'),
             }
             group = projects[project_id]
             if group not in reports:
@@ -233,7 +257,7 @@ async def async_main():
             reports[group].append(info)
 
     for group, report in reports.items():
-        print(group)
+        print(yellow(bold(group)))
         render_group_report(
             sorted(report, key=lambda x: x['created_at']),
             skip_approved_by_me=args.skip_approved_by_me,
@@ -262,25 +286,37 @@ def render_group_report(report: list, skip_approved_by_me=False, show_only_my=Fa
         if author in robots:
             author_avatar = '🤖'
 
+        max_author_name_len = min(12, max_author_name_len)
+
+        author_name = r['author_username'][:max_author_name_len]
+        if author_name == r['current_user']:
+            author_name = green(author_name) + ' ' * (max_author_name_len - len(author_name))
+
         items = [
-            f"""{author_avatar}{r['author_username']:<{max_author_name_len}}""", f"""{age_days:>3}d"""
+            f"""{author_avatar}{author_name:<{max_author_name_len}}""",
+            f""" {r['project_name'][0:10]:<10} """,
+            f"""{age_days:>3}d"""
         ]
 
-        link_title = f"""{r['title'][:70]:<70}"""
-        items.append(f"""{link(r['web_url'], link_title):<70}""")
+        link_title = f"""{r['title'][:60]:<60}"""
+        items.append(f""" {link(r['web_url'], link_title):<70} """)
 
         flags = []
         if r['unresolved_count']:
-            flags.append(str(r['unresolved_count']) + ' 💬')
-        if not r['approvals'] and not r['unresolved_count'] and not r['has_conflicts']:
-            flags.append('⏳')
+            flags.append(subscript(r['unresolved_count']) + '💬')
         if r['has_conflicts']:
             flags.append('🛑')
+        if r['pipeline_status'] == 'failed':
+            flags.append('💥')
 
         if not flags:
             flags.append('⏳')
 
-        items.append(f"""{' '.join(flags):>4}""")
+        w = 5
+        if len(flags) > 1:
+            w -= 1
+
+        items.append(f"""{' '.join(flags):<{w}}""")
 
         skip_mr = False
         if r['approvals']:
@@ -296,13 +332,13 @@ def render_group_report(report: list, skip_approved_by_me=False, show_only_my=Fa
             trusted_approvals, approvals = sorted(trusted_approvals), sorted(approvals)
             trusted_approvals.extend(approvals)
 
-            items.append(f"""✅{', '.join(trusted_approvals)}""")
+            items.append(f""" ✅ {', '.join(trusted_approvals)}""")
 
         else:
             items.append('')
 
         if not skip_mr:
-            print(' | '.join(items))
+            print('|'.join(items))
 
 
 def main():
