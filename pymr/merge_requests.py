@@ -305,15 +305,20 @@ def render_group_report(report: list, skip_approved_by_me=False, show_only_my=Fa
         items.append(f""" {link(r['web_url'], link_title):<70} """)
 
         flags = []
-        if r['unresolved_count']:
-            flags.append(subscript(r['unresolved_count']) + '💬')
+        has_problems = False
         if r['has_conflicts']:
+            has_problems = True
             flags.append('🛑')
         if r['pipeline_status'] == 'failed':
+            has_problems = True
             flags.append('💥')
-
+        if r['pipeline_status'] == 'success' and not has_problems:
+            flags.append('🚦')
         if not flags:
             flags.append('⏳')
+
+        if r['unresolved_count']:
+            flags.append(subscript(r['unresolved_count']) + '💬')
 
         w = 5
         if len(flags) > 1:
