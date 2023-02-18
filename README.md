@@ -36,6 +36,9 @@ Run:
 ```shell
 mr
 ```
+Possible result:
+
+<img width="897" alt="mr-result" src="https://user-images.githubusercontent.com/17192647/219855788-44f70d64-1d95-4b96-81e4-8eb1f794a26f.png">
 
 
 ## Installation for development
