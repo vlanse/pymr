@@ -40,6 +40,7 @@ Possible result:
 
 <img width="897" alt="mr-result" src="https://user-images.githubusercontent.com/17192647/219855788-44f70d64-1d95-4b96-81e4-8eb1f794a26f.png">
 
+(in some modern terminal emulators like iTerm MRs captions are clickable links)
 
 ## Installation for development
 Install virtualenv package (`pip3 install virtualenv`).
