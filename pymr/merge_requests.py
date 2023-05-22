@@ -10,6 +10,7 @@ from typing import Set
 import aiohttp
 import tenacity
 import yarl
+from aiohttp import client_exceptions
 from dateutil import parser as dt_parser
 from ruamel.yaml import YAML
 from tenacity import retry, stop_after_attempt
@@ -162,6 +163,8 @@ async def async_main():
     project_names = {proj['id']: name for group_name, group in config['groups'].items() for name, proj in
                      group['projects'].items()}
 
+    groups = [x for x in config['groups']]
+
     async with aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(limit=0, ssl=False),
             base_url=yarl.URL(config['gitlab']),
@@ -256,10 +259,10 @@ async def async_main():
 
             reports[group].append(info)
 
-    for group, report in reports.items():
+    for group in groups:
         print(yellow(bold(group)))
         render_group_report(
-            sorted(report, key=lambda x: x['created_at']),
+            sorted(reports[group], key=lambda x: x['created_at']),
             skip_approved_by_me=args.skip_approved_by_me,
             robots=robots,
             **group_settings.get(group, {}),
@@ -349,6 +352,19 @@ def render_group_report(report: list, skip_approved_by_me=False, show_only_my=Fa
             print('|'.join(items))
 
 
+def log_error(wrapped, *args, **kwargs):
+    def wrap():
+        try:
+            wrapped(*args, **kwargs)
+        except RuntimeError as rt:
+            print(f'error has occurred: {rt}', )
+        except client_exceptions.ContentTypeError as ct:
+            print(f'invalid response content-type at {ct.request_info.url} : {ct.message}', )
+
+    return wrap
+
+
+@log_error
 def main():
     loop = asyncio.new_event_loop()
     loop.run_until_complete(async_main())
