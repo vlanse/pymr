@@ -2,7 +2,7 @@ author_info = (
     ('Vladimir Semenov', 'vlanse@gmail.com'),
 )
 
-__version__ = '0.0.2'
+__version__ = '0.0.3'
 
 __author__ = ", ".join("{} <{}>".format(*info) for info in author_info)
 

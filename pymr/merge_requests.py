@@ -5,7 +5,6 @@ import os
 from argparse import ArgumentParser
 from collections import OrderedDict
 from pathlib import Path
-from typing import Set
 
 import aiohttp
 import tenacity
@@ -14,6 +13,7 @@ from aiohttp import client_exceptions
 from dateutil import parser as dt_parser
 from ruamel.yaml import YAML
 from tenacity import retry, stop_after_attempt
+from typing import Set
 
 
 def red(text): return f'\033[91m{text}\033[00m'
@@ -141,6 +141,7 @@ async def get_mr_info(session: aiohttp.ClientSession, project_id: int, mr_iid: i
 async def async_main():
     parser = ArgumentParser()
     parser.add_argument('--skip-approved-by-me', action='store_true', help='skip MRs approved by me')
+    parser.add_argument('--my', action='store_true', default=False, help='show only MRs created by me')
     args = parser.parse_args()
 
     config_path = os.path.join(str(Path.home()), 'pymr-config.yaml')
@@ -265,11 +266,16 @@ async def async_main():
             sorted(reports[group], key=lambda x: x['created_at']),
             skip_approved_by_me=args.skip_approved_by_me,
             robots=robots,
-            **group_settings.get(group, {}),
+            show_only_my=args.my or group_settings.get('show_only_my', False)
         )
 
 
-def render_group_report(report: list, skip_approved_by_me=False, show_only_my=False, robots: Set[str] = None):
+def render_group_report(
+        report: list,
+        skip_approved_by_me=False,
+        show_only_my=False,
+        robots: Set[str] = None,
+):
     all_authors = set()
     for r in report:
         # for a in r['approvals']:
