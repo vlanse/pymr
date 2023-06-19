@@ -42,6 +42,11 @@ Possible result:
 
 (in some modern terminal emulators like iTerm MRs captions are clickable links)
 
+To list available options, run:
+```shell
+mr --help
+```
+
 ## Installation for development
 Install virtualenv package (`pip3 install virtualenv`).
 
