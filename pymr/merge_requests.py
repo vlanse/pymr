@@ -266,7 +266,7 @@ async def async_main():
             sorted(reports[group], key=lambda x: x['created_at']),
             skip_approved_by_me=args.skip_approved_by_me,
             robots=robots,
-            show_only_my=args.my or group_settings.get('show_only_my', False)
+            show_only_my=args.my | group_settings.get(group, dict()).get('show_only_my', False)
         )
 
 
