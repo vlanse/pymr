@@ -5,6 +5,7 @@ import os
 from argparse import ArgumentParser
 from collections import OrderedDict
 from pathlib import Path
+from typing import Set
 
 import aiohttp
 import tenacity
@@ -13,7 +14,6 @@ from aiohttp import client_exceptions
 from dateutil import parser as dt_parser
 from ruamel.yaml import YAML
 from tenacity import retry, stop_after_attempt
-from typing import Set
 
 
 def red(text): return f'\033[91m{text}\033[00m'
@@ -218,6 +218,7 @@ async def async_main():
         )
 
     reports = OrderedDict()
+
     for project_id, project in data.items():
         if not project['mrs']:
             continue
@@ -255,37 +256,43 @@ async def async_main():
                 'pipeline_status': (mr.get('mr_info', {}).get('pipeline', {}) or {}).get('status'),
             }
             group = projects[project_id]
+
+            show_only_my = args.my | group_settings.get(group, dict()).get('show_only_my', False)
+
+            if show_only_my and info['author_username'] != info['current_user']:
+                continue
+
+            skip_mr = False
+            if info['approvals']:
+                for a in info['approvals']:
+                    if args.skip_approved_by_me and a == info['current_user']:
+                        skip_mr = True
+            if skip_mr:
+                continue
+
             if group not in reports:
                 reports[group] = []
 
             reports[group].append(info)
 
     for group in groups:
+        if group not in reports:
+            continue
+
         print(yellow(bold(group)))
         render_group_report(
             sorted(reports[group], key=lambda x: x['created_at']),
-            skip_approved_by_me=args.skip_approved_by_me,
             robots=robots,
-            show_only_my=args.my | group_settings.get(group, dict()).get('show_only_my', False)
         )
 
 
-def render_group_report(
-        report: list,
-        skip_approved_by_me=False,
-        show_only_my=False,
-        robots: Set[str] = None,
-):
+def render_group_report(report: list, robots: Set[str] = None):
     all_authors = set()
     for r in report:
-        # for a in r['approvals']:
         all_authors.add(r['author_username'])
     max_author_name_len = max(len(x) for x in all_authors)
 
     for r in report:
-        if show_only_my and r['author_username'] != r['current_user']:
-            continue
-
         age_days = (datetime.datetime.utcnow() - r['created_at'].replace(tzinfo=None)).days
 
         author = r['author_username']
@@ -335,12 +342,9 @@ def render_group_report(
 
         items.append(f"""{' '.join(flags):<{w}}""")
 
-        skip_mr = False
         if r['approvals']:
             trusted_approvals, approvals = [], []
             for a in r['approvals']:
-                if skip_approved_by_me and a == r['current_user']:
-                    skip_mr = True
 
                 if a in r['eligible_approvers']:
                     trusted_approvals.append(green(a))
@@ -354,8 +358,7 @@ def render_group_report(
         else:
             items.append('')
 
-        if not skip_mr:
-            print('|'.join(items))
+        print('|'.join(items))
 
 
 def log_error(wrapped, *args, **kwargs):
