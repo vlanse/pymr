@@ -42,6 +42,21 @@ Possible result:
 
 (in some modern terminal emulators like iTerm MRs captions are clickable links)
 
+Symbols meaning in output:
+
+🛑 - MR has unresolved conflicts
+
+💥 - pipeline has failed
+
+🚦 - pipeline has succeeded, no problems detected
+
+⏳ - waiting for some action
+
+💀 - MR is too old (> 10d for now)
+
+🤖 - MR is created by 'robot', see `robots` section in config
+
+
 To list available options, run:
 ```shell
 mr --help
