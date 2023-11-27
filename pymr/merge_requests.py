@@ -200,10 +200,11 @@ async def async_main():
         project_mr_iids = {proj_id: [mr_iid for mr_iid in proj['mrs']] for proj_id, proj in data.items()}
 
         async def collect_mr_data(project_id, mr_iids):
-            discussions, approvals, commits, mr_infos = await asyncio.gather(
+            # discussions, approvals, commits, mr_infos = await asyncio.gather(
+            discussions, approvals, mr_infos = await asyncio.gather(
                 asyncio.gather(*(get_discussions(session, project_id, mr_iid) for mr_iid in mr_iids)),
                 asyncio.gather(*(get_approvals(session, project_id, mr_iid) for mr_iid in mr_iids)),
-                asyncio.gather(*(get_commits(session, project_id, mr_iid) for mr_iid in mr_iids)),
+                # asyncio.gather(*(get_commits(session, project_id, mr_iid) for mr_iid in mr_iids)),
                 asyncio.gather(*(get_mr_info(session, project_id, mr_iid) for mr_iid in mr_iids)),
             )
             for idx in range(len(mr_iids)):
@@ -211,7 +212,7 @@ async def async_main():
                 data[project_id]['mrs'][mr_iid].update({
                     'approvals': approvals[idx],
                     'discussions': discussions[idx],
-                    'commits': commits[idx],
+                    # 'commits': commits[idx],
                     'mr_info': mr_infos[idx],
                 })
 
@@ -239,8 +240,8 @@ async def async_main():
             unresolved_count = len([x for x in unresolved_threads if x])
 
             author_username = mr['mr']['author']['username']
-            if mr['commits']:
-                author_username = mr['commits'][-1]['author_email'].split('@')[0]
+            # if mr['commits']:
+            #     author_username = mr['commits'][-1]['author_email'].split('@')[0]
 
             info = {
                 'web_url': mr['mr']['web_url'],

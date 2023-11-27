@@ -36,6 +36,8 @@ config:
           id: PROJECT_ID_2
 ```
 
+If you see error `too many open files error` consider either reducing number of repos in config, or use `ulimit -n <limit>` command to increase per-process file handlers limit.
+
 Put gitlab address and access token there, write your projects with their IDs
 
 Run:
