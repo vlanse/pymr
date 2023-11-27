@@ -155,6 +155,8 @@ async def async_main():
 
     robots = {x for x in config['robots']}
 
+    team = {x for x in config['team']}
+
     group_settings = {group_name: {k: v} for group_name, group in config['groups'].items() for k, v in group.items() if
                       k != 'projects'}
 
@@ -258,8 +260,12 @@ async def async_main():
             group = projects[project_id]
 
             show_only_my = args.my | group_settings.get(group, dict()).get('show_only_my', False)
+            show_only_team = group_settings.get(group, dict()).get('show_only_team', False)
 
             if show_only_my and info['author_username'] != info['current_user']:
+                continue
+
+            if show_only_team and info['author_username'] not in team:
                 continue
 
             skip_mr = False

@@ -14,16 +14,23 @@ Create `pymr-config.yaml` like this in your home folder
 config:
   gitlab: 'https://gitlab.com'
   token: "gitlab private token"
+  team: [dev1_login, dev2_login] # team of interest, see show_only_team option below
   robots: [some-robot-account] # automation accounts usernames, to highlight MRs by API clients with special avatar
   groups:
     project-group-1:
       # per-group setting section
-      show_only_my: true  # if only MRs authored by current user are needed for some reason
+      show_only_my: true  # if only MRs authored by current user are needed for some reason, this overrides show_only_team option
       projects:
         my_amazing_repo:
           id: PROJECT_ID
 
     project-group-2:
+      projects:
+        another_repo:
+          id: PROJECT_ID_2
+
+    project-group-3:
+      show_only_team: true # only team's MRs will be shown
       projects:
         another_repo:
           id: PROJECT_ID_2
