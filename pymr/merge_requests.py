@@ -319,11 +319,6 @@ async def async_main():
 
 
 def render_group_report(report: list, robots: Set[str] = None):
-    all_authors = set()
-    for r in report:
-        all_authors.add(r['author_username'])
-    max_author_name_len = max(len(x) for x in all_authors)
-
     for r in report:
         age_days = (datetime.datetime.utcnow() - r['created_at'].replace(tzinfo=None)).days
 
@@ -334,7 +329,7 @@ def render_group_report(report: list, robots: Set[str] = None):
         if author in robots:
             author_avatar = '🤖'
 
-        max_author_name_len = min(12, max_author_name_len)
+        max_author_name_len = 12
 
         author_name = r['author_username'][:max_author_name_len]
         own_mr = author_name == r['current_user']
