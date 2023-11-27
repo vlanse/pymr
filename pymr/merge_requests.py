@@ -200,11 +200,9 @@ async def async_main():
         project_mr_iids = {proj_id: [mr_iid for mr_iid in proj['mrs']] for proj_id, proj in data.items()}
 
         async def collect_mr_data(project_id, mr_iids):
-            # discussions, approvals, commits, mr_infos = await asyncio.gather(
             discussions, approvals, mr_infos = await asyncio.gather(
                 asyncio.gather(*(get_discussions(session, project_id, mr_iid) for mr_iid in mr_iids)),
                 asyncio.gather(*(get_approvals(session, project_id, mr_iid) for mr_iid in mr_iids)),
-                # asyncio.gather(*(get_commits(session, project_id, mr_iid) for mr_iid in mr_iids)),
                 asyncio.gather(*(get_mr_info(session, project_id, mr_iid) for mr_iid in mr_iids)),
             )
             for idx in range(len(mr_iids)):
@@ -212,7 +210,6 @@ async def async_main():
                 data[project_id]['mrs'][mr_iid].update({
                     'approvals': approvals[idx],
                     'discussions': discussions[idx],
-                    # 'commits': commits[idx],
                     'mr_info': mr_infos[idx],
                 })
 
@@ -221,6 +218,7 @@ async def async_main():
         )
 
     reports = OrderedDict()
+    mrs_to_get_commits = []
 
     for project_id, project in data.items():
         if not project['mrs']:
@@ -240,10 +238,12 @@ async def async_main():
             unresolved_count = len([x for x in unresolved_threads if x])
 
             author_username = mr['mr']['author']['username']
-            # if mr['commits']:
-            #     author_username = mr['commits'][-1]['author_email'].split('@')[0]
+            if author_username in robots:
+                mrs_to_get_commits.append({'project_id': mr['mr']['project_id'], 'iid': mr['mr']['iid']})
 
             info = {
+                'project_id': mr['mr']['project_id'],
+                'iid': mr['mr']['iid'],
                 'web_url': mr['mr']['web_url'],
                 'project_name': project_names[mr['mr']['project_id']],
                 'title': mr['mr']['title'],
@@ -259,6 +259,37 @@ async def async_main():
                 'pipeline_status': (mr.get('mr_info', {}).get('pipeline', {}) or {}).get('status'),
             }
             group = projects[project_id]
+
+            if group not in reports:
+                reports[group] = []
+
+            reports[group].append(info)
+
+    async with aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(limit=0, ssl=False),
+            base_url=yarl.URL(config['gitlab']),
+            headers={'Private-Token': config['token']}
+    ) as session:
+        commit_data = await asyncio.gather(
+            *(get_commits(session, mr['project_id'], mr['iid']) for mr in mrs_to_get_commits),
+        )
+
+    commit_data_idx = {}
+    for mr_idx in range(len(mrs_to_get_commits)):
+        mr = mrs_to_get_commits[mr_idx]
+        d = commit_data_idx.get(mr['project_id'], {})
+        d[mr['iid']] = commit_data[mr_idx]
+        commit_data_idx[mr['project_id']] = d
+
+    for group in groups:
+        if group not in reports:
+            continue
+
+        final_mr_list = []
+        for info in reports[group]:
+            commits = commit_data_idx.get(info['project_id'], {}).get(info['iid'])
+            if commits:
+                info['author_username'] = commits[-1]['author_email'].split('@')[0]
 
             show_only_my = args.my | group_settings.get(group, dict()).get('show_only_my', False)
             show_only_team = group_settings.get(group, dict()).get('show_only_team', False)
@@ -276,21 +307,15 @@ async def async_main():
                         skip_mr = True
             if skip_mr:
                 continue
-
-            if group not in reports:
-                reports[group] = []
-
-            reports[group].append(info)
-
-    for group in groups:
-        if group not in reports:
-            continue
+            final_mr_list.append(info)
 
         print(yellow(bold(group)))
-        render_group_report(
-            sorted(reports[group], key=lambda x: x['created_at']),
-            robots=robots,
-        )
+
+        if final_mr_list:
+            render_group_report(
+                sorted(final_mr_list, key=lambda x: x['created_at']),
+                robots=robots,
+            )
 
 
 def render_group_report(report: list, robots: Set[str] = None):
