@@ -63,6 +63,8 @@ Symbols meaning in output:
 
 💀 - MR is too old (> 10d for now)
 
+💔 - MR was approved by current user (you) at some moment earlier, but approve has been removed for some reason
+
 🤖 - MR is created by 'robot', see `robots` section in config
 
 

@@ -241,6 +241,19 @@ async def async_main():
             if author_username in robots:
                 mrs_to_get_commits.append({'project_id': mr['mr']['project_id'], 'iid': mr['mr']['iid']})
 
+            was_approved_earlier = False
+            if author_username != current_user['username']:
+                for d in mr['discussions']:
+                    if not len(d['notes']):
+                        continue
+                    n = d['notes'][0]
+                    was_approved_earlier = (
+                            n.get('author', {}).get('username') == current_user['username']
+                            and n['body'] == 'approved this merge request'
+                    )
+                    if was_approved_earlier:
+                        break
+
             info = {
                 'project_id': mr['mr']['project_id'],
                 'iid': mr['mr']['iid'],
@@ -257,6 +270,7 @@ async def async_main():
                 'eligible_approvers': eligible_approvers,
                 'current_user': current_user['username'],
                 'pipeline_status': (mr.get('mr_info', {}).get('pipeline', {}) or {}).get('status'),
+                'was_approved_earlier': was_approved_earlier,
             }
             group = projects[project_id]
 
@@ -328,6 +342,8 @@ def render_group_report(report: list, robots: Set[str] = None):
             author_avatar = '💀'
         if author in robots:
             author_avatar = '🤖'
+        if r['current_user'] not in r['approvals'] and r['was_approved_earlier']:
+            author_avatar = '💔'
 
         max_author_name_len = 12
 
@@ -372,7 +388,6 @@ def render_group_report(report: list, robots: Set[str] = None):
         if r['approvals']:
             trusted_approvals, approvals = [], []
             for a in r['approvals']:
-
                 if a in r['eligible_approvers']:
                     trusted_approvals.append(green(a))
                 else:
