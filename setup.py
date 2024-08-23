@@ -1,6 +1,6 @@
 import os
-import sys
 
+import sys
 from setuptools import setup, find_packages
 
 import pymr as module
@@ -27,9 +27,9 @@ def walker(base, *paths):
 requires = (
     'ruamel.yaml~=0.17.21',
     'ruamel.yaml.clib~=0.2.7',
-    'aiohttp~=3.8.3',
+    'aiohttp~=3.10.5',
     'tenacity~=8.1.0',
-    'yarl~=1.8.2',
+    'yarl~=1.9.4',
     'python-dateutil~=2.8.2',
     'setuptools~=65.5.1',
 )
