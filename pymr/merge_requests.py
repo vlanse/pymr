@@ -13,6 +13,7 @@ import yarl
 from aiohttp import client_exceptions
 from dateutil import parser as dt_parser
 from ruamel.yaml import YAML
+from six import reraise
 from tenacity import retry, stop_after_attempt
 
 
@@ -51,7 +52,7 @@ def bold(s: str):
     return f"""\033[1m{s}\033[0m"""
 
 
-@retry(stop=stop_after_attempt(1))
+@retry(reraise=True, stop=stop_after_attempt(1))
 async def api_call(
         session: aiohttp.ClientSession, path: str,
         payload: dict = None, method='POST', query: dict = None, headers: dict = None,
@@ -411,6 +412,8 @@ def log_error(wrapped, *args, **kwargs):
             print(f'error has occurred: {rt}', )
         except client_exceptions.ContentTypeError as ct:
             print(f'invalid response content-type at {ct.request_info.url} : {ct.message}', )
+        except aiohttp.client_exceptions.ClientConnectorError as err:
+            print(f'check connection: {err}')
 
     return wrap
 
